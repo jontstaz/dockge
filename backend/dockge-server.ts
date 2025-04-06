@@ -404,6 +404,10 @@ export class DockgeServer {
             });
 
             checkVersion.startInterval();
+            
+            // Start checking for Docker image updates
+            Stack.startUpdateChecker(this);
+            log.info("server", "Started Docker image update checker");
         });
 
         gracefulShutdown(this.httpServer, {

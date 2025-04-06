@@ -29,10 +29,12 @@ export class Stack {
     protected _configFilePath?: string;
     protected _composeFileName: string = "compose.yaml";
     protected server: DockgeServer;
+    protected _hasUpdates = false;
 
     protected combinedTerminal? : Terminal;
 
     protected static managedStackList: Map<string, Stack> = new Map();
+    protected static updateCheckInterval?: NodeJS.Timeout;
 
     constructor(server : DockgeServer, name : string, composeYAML? : string, composeENV? : string, skipFSOperations = false) {
         this.name = name;
@@ -86,6 +88,7 @@ export class Stack {
             isManagedByDockge: this.isManagedByDockge,
             composeFileName: this._composeFileName,
             endpoint,
+            hasUpdates: this._hasUpdates,
         };
     }
 
@@ -529,5 +532,119 @@ export class Stack {
             return statusList;
         }
 
+    }
+
+    /**
+     * Check if any of the Docker images used in the stack have updates available
+     */
+    async checkForUpdates() : Promise<boolean> {
+        try {
+            // Skip if the stack is not managed by Dockge
+            if (!this.isManagedByDockge) {
+                return false;
+            }
+            
+            // Parse the compose YAML to find all images
+            const composeFile = yaml.parse(this.composeYAML);
+            
+            if (!composeFile || !composeFile.services) {
+                return false;
+            }
+            
+            let updatesAvailable = false;
+            
+            // For each service, check if its image has an update
+            for (const [serviceName, service] of Object.entries(composeFile.services)) {
+                if (!service || !service.image) {
+                    continue;
+                }
+                
+                // Execute docker pull --quiet to check for updates
+                const pullOutput = await childProcessAsync.exec(`docker pull --quiet ${service.image}`, {
+                    cwd: this.path,
+                    encoding: "utf-8",
+                });
+                
+                if (pullOutput.stdout) {
+                    const output = pullOutput.stdout.toString().trim();
+                    
+                    // If "Image is up to date" is not in the output and there is a digest, an update is available
+                    if (output && !output.includes("Image is up to date") && output.includes("digest:")) {
+                        log.debug("checkForUpdates", `Update available for ${this.name}:${serviceName} (${service.image})`);
+                        updatesAvailable = true;
+                        break;  // We only need to know if at least one image has an update
+                    }
+                }
+            }
+            
+            this._hasUpdates = updatesAvailable;
+            return updatesAvailable;
+            
+        } catch (e) {
+            if (e instanceof Error) {
+                log.warn("checkForUpdates", `Failed to check for updates for stack ${this.name}: ${e.message}`);
+            }
+            return false;
+        }
+    }
+
+    /**
+     * Check all stacks for available Docker image updates
+     * @param server The DockgeServer instance
+     */
+    static async checkAllStacksForUpdates(server: DockgeServer): Promise<void> {
+        try {
+            const stackList = await this.getStackList(server, false);
+            
+            for (const [_, stack] of stackList) {
+                await stack.checkForUpdates();
+            }
+            
+            // Update the cache
+            this.managedStackList = new Map(stackList);
+            
+            log.debug("checkAllStacksForUpdates", "Finished checking all stacks for updates");
+        } catch (e) {
+            if (e instanceof Error) {
+                log.error("checkAllStacksForUpdates", `Failed to check all stacks for updates: ${e.message}`);
+            }
+        }
+    }
+    
+    /**
+     * Start a periodic check for Docker image updates
+     * @param server The DockgeServer instance
+     * @param intervalMs How often to check for updates in milliseconds (default: 24 hours)
+     */
+    static startUpdateChecker(server: DockgeServer, intervalMs = 1000 * 60 * 60 * 24): void {
+        // Clear any existing interval
+        if (this.updateCheckInterval) {
+            clearInterval(this.updateCheckInterval);
+        }
+        
+        // Perform an initial check
+        this.checkAllStacksForUpdates(server).catch(e => {
+            log.error("startUpdateChecker", `Initial update check failed: ${e.message}`);
+        });
+        
+        // Set up recurring checks
+        this.updateCheckInterval = setInterval(() => {
+            this.checkAllStacksForUpdates(server).catch(e => {
+                log.error("startUpdateChecker", `Update check failed: ${e.message}`);
+            });
+        }, intervalMs);
+        
+        log.info("startUpdateChecker", `Update checker started with interval of ${intervalMs}ms`);
+    }
+    
+    /**
+     * Stop the periodic update checker
+     */
+    static stopUpdateChecker(): void {
+        if (this.updateCheckInterval) {
+            clearInterval(this.updateCheckInterval);
+            this.updateCheckInterval = undefined;
+            log.info("stopUpdateChecker", "Update checker stopped");
+        }
     }
 }

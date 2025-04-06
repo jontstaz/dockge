@@ -41,6 +41,11 @@
                         {{ $t("updateStack") }}
                     </button>
 
+                    <button v-if="!isEditMode" class="btn btn-normal" :disabled="processing || checkingUpdates" @click="checkForUpdates">
+                        <font-awesome-icon icon="sync" :spin="checkingUpdates" class="me-1" />
+                        {{ $t("Check Updates") }}
+                    </button>
+
                     <button v-if="!isEditMode && active" class="btn btn-normal" :disabled="processing" @click="stopStack">
                         <font-awesome-icon icon="stop" class="me-1" />
                         {{ $t("stopStack") }}
@@ -311,6 +316,7 @@ export default {
             showDeleteDialog: false,
             newContainerName: "",
             stopServiceStatusTimeout: false,
+            checkingUpdates: false,
         };
     },
     computed: {
@@ -642,11 +648,26 @@ export default {
         },
 
         updateStack() {
+            this.submitted = false;
             this.processing = true;
+            this.showProgressTerminal = true;
 
-            this.$root.emitAgent(this.endpoint, "updateStack", this.stack.name, (res) => {
+            this.terminalName = getComposeTerminalName(this.endpoint, this.stack.name);
+            this.$root.getSocket().emit("updateStack", this.stack.name, this.endpoint, (res) => {
                 this.processing = false;
-                this.$root.toastRes(res);
+                if (!res.ok) {
+                    this.$root.showError(res.msg);
+                }
+            });
+        },
+
+        checkForUpdates() {
+            this.checkingUpdates = true;
+            this.$root.getSocket().emit("checkForUpdates", this.stack.name, (res) => {
+                this.checkingUpdates = false;
+                if (!res.ok) {
+                    this.$root.showError(res.msg);
+                }
             });
         },
 

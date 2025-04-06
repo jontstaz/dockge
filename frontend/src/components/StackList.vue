@@ -19,6 +19,10 @@
                         <input v-model="searchText" class="form-control search-input" autocomplete="off" />
                     </form>
                 </div>
+                <button class="btn btn-sm btn-outline-primary ms-2" type="button" @click="checkAllForUpdates" :disabled="checkingUpdates">
+                    <font-awesome-icon icon="sync" :spin="checkingUpdates" />
+                    {{ $t("Check Updates") }}
+                </button>
             </div>
 
             <!-- TODO -->
@@ -92,7 +96,8 @@ export default {
                 status: null,
                 active: null,
                 tags: null,
-            }
+            },
+            checkingUpdates: false,
         };
     },
     computed: {
@@ -345,6 +350,19 @@ export default {
                 .forEach(id => this.$root.getSocket().emit("resumeStack", id, () => {}));
 
             this.cancelSelectMode();
+        },
+        /**
+         * Check all stacks for image updates
+         * @returns {void}
+         */
+        checkAllForUpdates() {
+            this.checkingUpdates = true;
+            this.$root.getSocket().emit("checkAllForUpdates", (res) => {
+                this.checkingUpdates = false;
+                if (!res.ok) {
+                    this.$root.showError(res.msg);
+                }
+            });
         },
     },
 };

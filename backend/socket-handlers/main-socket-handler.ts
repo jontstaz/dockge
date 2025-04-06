@@ -18,6 +18,7 @@ import {
 import { passwordStrength } from "check-password-strength";
 import jwt from "jsonwebtoken";
 import { Settings } from "../settings";
+import { Stack } from "../stack";
 
 export class MainSocketHandler extends SocketHandler {
     create(socket : DockgeSocket, server : DockgeServer) {
@@ -321,6 +322,46 @@ export class MainSocketHandler extends SocketHandler {
                     ok: true,
                     composeTemplate,
                 });
+            } catch (e) {
+                callbackError(e, callback);
+            }
+        });
+
+        // Check for Docker image updates
+        socket.on("checkForUpdates", async (stackName, callback) => {
+            try {
+                checkLogin(socket);
+                
+                const stack = await Stack.getStack(server, stackName);
+                const hasUpdates = await stack.checkForUpdates();
+                
+                callback({
+                    ok: true,
+                    hasUpdates
+                });
+                
+                // Send updated stack list to all clients
+                server.sendStackList(false);
+                
+            } catch (e) {
+                callbackError(e, callback);
+            }
+        });
+        
+        // Check for Docker image updates for all stacks
+        socket.on("checkAllForUpdates", async (callback) => {
+            try {
+                checkLogin(socket);
+                
+                await Stack.checkAllStacksForUpdates(server);
+                
+                callback({
+                    ok: true
+                });
+                
+                // Send updated stack list to all clients
+                server.sendStackList(false);
+                
             } catch (e) {
                 callbackError(e, callback);
             }

@@ -5,6 +5,9 @@
             <span>{{ stackName }}</span>
             <div v-if="$root.agentCount > 1" class="endpoint">{{ endpointDisplay }}</div>
         </div>
+        <div v-if="stack.hasUpdates" class="update-indicator" title="Updates available">
+            <span class="dot"></span>
+        </div>
     </router-link>
 </template>
 
@@ -149,6 +152,7 @@ export default {
     }
     .title {
         margin-top: -4px;
+        flex-grow: 1;
     }
     .endpoint {
         font-size: 12px;
@@ -176,6 +180,41 @@ export default {
 
 .dim {
     opacity: 0.5;
+}
+
+/* Update indicator styles */
+.update-indicator {
+    margin-left: 10px;
+    margin-right: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.dot {
+    height: 8px;
+    width: 8px;
+    background-color: #4CAF50;
+    border-radius: 50%;
+    display: inline-block;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        transform: scale(0.95);
+        box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.7);
+    }
+    
+    70% {
+        transform: scale(1);
+        box-shadow: 0 0 0 6px rgba(76, 175, 80, 0);
+    }
+    
+    100% {
+        transform: scale(0.95);
+        box-shadow: 0 0 0 0 rgba(76, 175, 80, 0);
+    }
 }
 
 </style>
